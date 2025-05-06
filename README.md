@@ -90,17 +90,3 @@ This project is:
 > This modern system replaces slow, manual paper-based processes and speeds up government responsiveness using smart cloud infrastructure.
 
 ---
-
-## 🚧 Status
-
-🟢 **In development** — actively being improved and refined.
-
-## 📁 Project Folder
-
-Ensure sensitive credentials like `.json` keys are **not pushed** to GitHub. Use `.gitignore` to exclude them and use `git filter-repo` to remove them from history if accidentally committed.
-
----
-
-## 📬 Contact
-
-For queries, contact **[Your Name]** at **[Your Email or GitHub Profile]**.
