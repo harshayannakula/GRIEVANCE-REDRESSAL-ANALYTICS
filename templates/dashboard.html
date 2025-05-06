@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Grievance Redressal System</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBqbwlcAh3jqPu3jIdwQ6FXehVIp7-7GOg&libraries=visualization,geometry,places"></script>
+    <style>
+        .complaint-card {
+            transition: transform 0.2s ease-in-out;
+        }
+        .complaint-card:hover {
+            transform: translateY(-2px);
+        }
+        .status-badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .status-pending {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+        .status-resolved {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+        .status-in-progress {
+            background-color: #dbeafe;
+            color: #1e40af;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 20px;
+            width: 80%;
+            max-width: 800px;
+            border-radius: 8px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .similarity-bar {
+            height: 20px;
+            background-color: #e5e7eb;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .similarity-fill {
+            height: 100%;
+            background-color: #3b82f6;
+            transition: width 0.3s ease;
+        }
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background-color: #e5e7eb;
+        }
+        .timeline-item {
+            position: relative;
+            padding-bottom: 20px;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -30px;
+            top: 0;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #3b82f6;
+        }
+        .department-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            background-color: #e0f2fe;
+            color: #0369a1;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        .map-container {
+            height: 300px;
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .heatmap-container {
+            height: 300px;
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+        }
+        .heatmap-legend {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: white;
+            padding: 8px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            font-size: 12px;
+        }
+        .heatmap-gradient {
+            height: 10px;
+            width: 100px;
+            background: linear-gradient(to right, rgba(0,255,0,0.2), rgba(255,0,0,0.8));
+            margin-top: 4px;
+        }
+        .heatmap-legend-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 2px;
+        }
+        .location-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .stat-card {
+            background-color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .zone-circle {
+            stroke: #3b82f6;
+            stroke-width: 2;
+            fill: rgba(59, 130, 246, 0.1);
+        }
+        .location-info-card {
+            background-color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-top: 1rem;
+        }
+        .location-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .metric-card {
+            background-color: #f8fafc;
+            padding: 0.75rem;
+            border-radius: 6px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <h1 class="text-xl font-bold text-gray-800">Grievance Redressal System</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="{{ url_for('submit_complaint') }}" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center">
+                        <i class="fas fa-plus mr-2"></i> New Complaint
+                    </a>
+                    <a href="{{ url_for('logout') }}" class="text-red-600 hover:text-red-800 flex items-center">
+                        <i class="fas fa-sign-out-alt mr-2"></i> Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-7xl mx-auto">
+            <!-- Welcome Section -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Welcome, {{ user_info.email }}</h2>
+                        <p class="text-gray-600 mt-1">Here's an overview of your complaints</p>
+                    </div>
+                    <div class="flex space-x-4">
+                        <div class="text-center">
+                            <p class="text-3xl font-bold text-blue-600">{{ complaints|length }}</p>
+                            <p class="text-sm text-gray-600">Total Complaints</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-3xl font-bold text-green-600">{{ complaints|selectattr('status', 'equalto', 'resolved')|list|length }}</p>
+                            <p class="text-sm text-gray-600">Resolved</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters and Search -->
+            <div class="bg-white rounded-lg shadow-md p-4 mb-8">
+                <div class="flex flex-wrap gap-4 items-center">
+                    <div class="flex-1 min-w-[200px]">
+                        <input type="text" id="searchInput" placeholder="Search complaints..." class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="flex space-x-4">
+                        <select id="statusFilter" class="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Filter by status">
+                            <option value="">All Status</option>
+                            <option value="pending">Pending</option>
+                            <option value="in-progress">In Progress</option>
+                            <option value="resolved">Resolved</option>
+                            <option value="withdrawn">Withdrawn</option>
+                        </select>
+                        <button id="filterButton" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center">
+                            <i class="fas fa-filter mr-2"></i> Apply Filters
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Complaints -->
+            <div class="mb-8">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">Active Complaints</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {% for complaint in complaints if complaint.status != 'withdrawn' %}
+                    <div class="complaint-card bg-white rounded-lg shadow-md overflow-hidden" data-status="{{ complaint.status }}" data-complaint-id="{{ complaint.id }}">
+                        {% if complaint.photo_url %}
+                        <img src="{{ complaint.photo_url }}" alt="Complaint photo" class="w-full h-48 object-cover">
+                        {% else %}
+                        <div class="w-full h-48 bg-gray-100 flex items-center justify-center">
+                            <i class="fas fa-image text-gray-400 text-4xl"></i>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="p-4">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="status-badge status-{{ complaint.status }}">
+                                    {{ complaint.status|title }}
+                                </span>
+                                <span class="text-sm text-gray-500">
+                                    {{ complaint.timestamp.split('T')[0] }}
+                                </span>
+                            </div>
+                            
+                            <p class="text-gray-800 mb-4 line-clamp-3">{{ complaint.text }}</p>
+                            
+                            {% if complaint.location %}
+                            <div class="flex items-center text-sm text-gray-600 mb-4">
+                                <i class="fas fa-map-marker-alt mr-2"></i>
+                                <span>Location: {{ complaint.location.latitude|round(6) }}, {{ complaint.location.longitude|round(6) }}</span>
+                            </div>
+                            {% endif %}
+                            
+                            <div class="flex justify-between items-center">
+                                <button onclick="viewComplaintDetails('{{ complaint.id }}')" class="text-blue-600 hover:text-blue-800 flex items-center">
+                                    <i class="fas fa-eye mr-2"></i> View Details
+                                </button>
+                                {% if complaint.status == 'pending' %}
+                                <button onclick="withdrawComplaint('{{ complaint.id }}')" class="text-red-600 hover:text-red-800 flex items-center">
+                                    <i class="fas fa-undo mr-2"></i> Withdraw
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="col-span-full text-center py-12">
+                        <i class="fas fa-inbox text-gray-400 text-6xl mb-4"></i>
+                        <h3 class="text-xl font-semibold text-gray-800">No Active Complaints</h3>
+                        <p class="text-gray-600 mt-2">You haven't submitted any active complaints yet.</p>
+                        <a href="{{ url_for('submit_complaint') }}" class="mt-4 inline-block bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700">
+                            Submit a New Complaint
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Withdrawn Complaints -->
+            <div class="mb-8">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">Withdrawn Complaints</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {% for complaint in complaints if complaint.status == 'withdrawn' %}
+                    <div class="complaint-card bg-gray-50 rounded-lg shadow-md overflow-hidden" data-status="{{ complaint.status }}" data-complaint-id="{{ complaint.id }}">
+                        {% if complaint.photo_url %}
+                        <img src="{{ complaint.photo_url }}" alt="Complaint photo" class="w-full h-48 object-cover opacity-50">
+                        {% else %}
+                        <div class="w-full h-48 bg-gray-100 flex items-center justify-center">
+                            <i class="fas fa-image text-gray-400 text-4xl"></i>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="p-4">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="status-badge status-{{ complaint.status }}">
+                                    {{ complaint.status|title }}
+                                </span>
+                                <span class="text-sm text-gray-500">
+                                    {{ complaint.timestamp.split('T')[0] }}
+                                </span>
+                            </div>
+                            
+                            <p class="text-gray-800 mb-4 line-clamp-3">{{ complaint.text }}</p>
+                            
+                            {% if complaint.location %}
+                            <div class="flex items-center text-sm text-gray-600 mb-4">
+                                <i class="fas fa-map-marker-alt mr-2"></i>
+                                <span>Location: {{ complaint.location.latitude|round(6) }}, {{ complaint.location.longitude|round(6) }}</span>
+                            </div>
+                            {% endif %}
+                            
+                            <div class="flex justify-between items-center">
+                                <button onclick="viewComplaintDetails('{{ complaint.id }}')" class="text-blue-600 hover:text-blue-800 flex items-center">
+                                    <i class="fas fa-eye mr-2"></i> View Details
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="col-span-full text-center py-12">
+                        <i class="fas fa-archive text-gray-400 text-6xl mb-4"></i>
+                        <h3 class="text-xl font-semibold text-gray-800">No Withdrawn Complaints</h3>
+                        <p class="text-gray-600 mt-2">You haven't withdrawn any complaints yet.</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Complaint Details -->
+    <div id="complaintModal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">Complaint Details</h2>
+                <button onclick="closeModal()" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Left Column -->
+                <div class="space-y-6">
+                    <!-- Complaint Information -->
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Complaint Information</h3>
+                        <div class="space-y-3">
+                            <div>
+                                <p class="text-sm text-gray-500">Status</p>
+                                <p class="font-medium" id="modalStatus"></p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Submitted On</p>
+                                <p class="font-medium" id="modalDate"></p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Description</p>
+                                <p class="font-medium" id="modalDescription"></p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Location</p>
+                                <p class="font-medium" id="modalLocation"></p>
+                                <p class="text-sm text-gray-500" id="modalAddress"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Location Map with Zone -->
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Location Analysis</h3>
+                        <div id="locationMap" class="map-container"></div>
+                        <div class="location-metrics">
+                            <div class="metric-card">
+                                <p class="text-sm text-gray-500">Zone Radius</p>
+                                <p class="text-lg font-semibold" id="zoneRadius">500m</p>
+                            </div>
+                            <div class="metric-card">
+                                <p class="text-sm text-gray-500">Nearby Complaints</p>
+                                <p class="text-lg font-semibold" id="nearbyComplaints">0</p>
+                            </div>
+                            <div class="metric-card">
+                                <p class="text-sm text-gray-500">Zone Density</p>
+                                <p class="text-lg font-semibold" id="zoneDensity">Low</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="space-y-6">
+                    <!-- Zone Analysis -->
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Zone Analysis</h3>
+                        <div class="space-y-4">
+                            <div class="location-info-card">
+                                <h4 class="font-medium text-gray-800 mb-2">Zone Statistics</h4>
+                                <div class="space-y-2">
+                                    <p class="text-sm text-gray-600">Total complaints in zone: <span id="zoneTotalComplaints" class="font-medium">0</span></p>
+                                    <p class="text-sm text-gray-600">Average resolution time: <span id="zoneAvgResolution" class="font-medium">-</span></p>
+                                    <p class="text-sm text-gray-600">Most common issue: <span id="zoneCommonIssue" class="font-medium">-</span></p>
+                                </div>
+                            </div>
+                            <div class="location-info-card">
+                                <h4 class="font-medium text-gray-800 mb-2">Nearby Landmarks</h4>
+                                <div id="nearbyLandmarks" class="space-y-2">
+                                    <!-- Landmarks will be dynamically added here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Status Timeline -->
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Status Timeline</h3>
+                        <div class="timeline" id="statusTimeline">
+                            <!-- Timeline items will be dynamically added here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize maps when the page loads
+            initMap();
+
+            const searchInput = document.getElementById('searchInput');
+            const statusFilter = document.getElementById('statusFilter');
+            const filterButton = document.getElementById('filterButton');
+            const complaintCards = document.querySelectorAll('.complaint-card');
+
+            function filterComplaints() {
+                const searchTerm = searchInput.value.toLowerCase();
+                const statusTerm = statusFilter.value;
+
+                complaintCards.forEach(card => {
+                    const text = card.querySelector('p').textContent.toLowerCase();
+                    const status = card.dataset.status;
+                    const matchesSearch = text.includes(searchTerm);
+                    const matchesStatus = !statusTerm || status === statusTerm;
+
+                    if (matchesSearch && matchesStatus) {
+                        card.style.display = '';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            }
+
+            searchInput.addEventListener('input', filterComplaints);
+            filterButton.addEventListener('click', filterComplaints);
+
+            // Add event listeners for view details buttons
+            document.querySelectorAll('[onclick^="viewComplaintDetails"]').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const complaintId = this.closest('.complaint-card').dataset.complaintId;
+                    viewComplaintDetails(complaintId);
+                });
+            });
+        });
+
+        let map;
+        let markers = [];
+        let zoneCircle;
+        let heatmap;
+        const ZONE_RADIUS = 500; // meters
+
+        function initMap() {
+            // Initialize main map
+            map = new google.maps.Map(document.getElementById('locationMap'), {
+                zoom: 12,
+                center: { lat: 0, lng: 0 },
+                mapTypeId: 'roadmap',
+                styles: [
+                    {
+                        featureType: "poi",
+                        elementType: "labels",
+                        stylers: [{ visibility: "off" }]
+                    },
+                    {
+                        featureType: "road",
+                        elementType: "geometry",
+                        stylers: [{ visibility: "off" }]
+                    }
+                ]
+            });
+
+            // Initialize heatmap layer
+            heatmap = new google.maps.visualization.HeatmapLayer({
+                data: [],
+                map: map,
+                radius: 30,
+                opacity: 0.8,
+                gradient: [
+                    'rgba(0, 255, 0, 0)',
+                    'rgba(0, 255, 0, 0.2)',
+                    'rgba(255, 255, 0, 0.4)',
+                    'rgba(255, 165, 0, 0.6)',
+                    'rgba(255, 0, 0, 0.8)'
+                ]
+            });
+
+            // Load all complaints for heatmap
+            loadAllComplaints();
+        }
+
+        function loadAllComplaints() {
+            // Fetch all complaints from the server
+            fetch('/get_all_complaints')
+                .then(response => response.json())
+                .then(complaints => {
+                    const heatmapData = [];
+                    let bounds = new google.maps.LatLngBounds();
+                    let hasValidLocations = false;
+
+                    complaints.forEach(complaint => {
+                        if (complaint.location && complaint.location.latitude && complaint.location.longitude) {
+                            const position = new google.maps.LatLng(
+                                complaint.location.latitude,
+                                complaint.location.longitude
+                            );
+                            heatmapData.push({
+                                location: position,
+                                weight: 1
+                            });
+                            bounds.extend(position);
+                            hasValidLocations = true;
+                        }
+                    });
+
+                    if (hasValidLocations) {
+                        heatmap.setData(heatmapData);
+                        // Fit map to show all heatmap points
+                        map.fitBounds(bounds);
+                        // Add some padding
+                        const padding = 100;
+                        map.panBy(padding, padding);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading complaints:', error);
+                });
+        }
+
+        function fetchLocationData(complaintId) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', `https://storage.googleapis.com/dataingestion_master/${complaintId}/location.json`, false);
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        try {
+                            const locationData = JSON.parse(xhr.responseText);
+                            if (locationData && typeof locationData.latitude === 'number' && typeof locationData.longitude === 'number') {
+                                resolve(locationData);
+                            } else {
+                                console.error('Invalid location data format:', locationData);
+                                resolve(null);
+                            }
+                        } catch (error) {
+                            console.error('Error parsing location data:', error);
+                            resolve(null);
+                        }
+                    } else {
+                        console.error('Error fetching location data:', xhr.status);
+                        resolve(null);
+                    }
+                };
+                xhr.onerror = function() {
+                    console.error('Network error while fetching location data');
+                    resolve(null);
+                };
+                xhr.send();
+            });
+        }
+
+        function viewComplaintDetails(complaintId) {
+            console.log('Viewing details for complaint:', complaintId);
+            
+            // Find the complaint card
+            const complaintCard = document.querySelector(`[data-complaint-id="${complaintId}"]`);
+            if (!complaintCard) {
+                console.error('Complaint card not found');
+                return;
+            }
+
+            // Extract basic complaint data
+            const complaint = {
+                id: complaintId,
+                status: complaintCard.querySelector('.status-badge').textContent.trim(),
+                timestamp: complaintCard.querySelector('.text-gray-500').textContent.trim(),
+                text: complaintCard.querySelector('p').textContent.trim()
+            };
+
+            // Set basic complaint information
+            document.getElementById('modalStatus').textContent = complaint.status;
+            document.getElementById('modalDate').textContent = complaint.timestamp;
+            document.getElementById('modalDescription').textContent = complaint.text;
+            
+            // Fetch and handle location data
+            const locationData = fetchLocationData(complaintId);
+            console.log('Fetched location data:', locationData);
+
+            if (locationData && typeof locationData.latitude === 'number' && typeof locationData.longitude === 'number') {
+                const locationText = `${locationData.latitude.toFixed(6)}, ${locationData.longitude.toFixed(6)}`;
+                document.getElementById('modalLocation').textContent = locationText;
+                document.getElementById('modalAddress').textContent = 'Loading address...';
+
+                // Update map and zone visualization
+                const position = new google.maps.LatLng(locationData.latitude, locationData.longitude);
+                
+                // Update main map
+                map.setCenter(position);
+                map.setZoom(15);
+                
+                // Clear existing markers and circle
+                markers.forEach(marker => marker.setMap(null));
+                markers = [];
+                if (zoneCircle) zoneCircle.setMap(null);
+
+                // Add marker for current complaint
+                const marker = new google.maps.Marker({
+                    position: position,
+                    map: map,
+                    title: 'Complaint Location',
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 8,
+                        fillColor: '#3b82f6',
+                        fillOpacity: 1,
+                        strokeColor: '#ffffff',
+                        strokeWeight: 2
+                    }
+                });
+                markers.push(marker);
+
+                // Add zone circle
+                zoneCircle = new google.maps.Circle({
+                    strokeColor: '#3b82f6',
+                    strokeOpacity: 0.8,
+                    strokeWeight: 2,
+                    fillColor: '#3b82f6',
+                    fillOpacity: 0.1,
+                    map: map,
+                    center: position,
+                    radius: ZONE_RADIUS
+                });
+
+                // Get address using reverse geocoding
+                const geocoder = new google.maps.Geocoder();
+                geocoder.geocode({ location: position }, (results, status) => {
+                    if (status === 'OK' && results[0]) {
+                        document.getElementById('modalAddress').textContent = results[0].formatted_address;
+                    } else {
+                        document.getElementById('modalAddress').textContent = 'Address not available';
+                    }
+                });
+
+                // Find nearby places
+                const service = new google.maps.places.PlacesService(map);
+                const request = {
+                    location: position,
+                    radius: ZONE_RADIUS,
+                    type: ['landmark', 'point_of_interest']
+                };
+
+                service.nearbySearch(request, (results, status) => {
+                    const landmarksContainer = document.getElementById('nearbyLandmarks');
+                    landmarksContainer.innerHTML = '';
+                    
+                    if (status === 'OK' && results.length > 0) {
+                        results.slice(0, 5).forEach(place => {
+                            const div = document.createElement('div');
+                            div.className = 'flex items-center space-x-2';
+                            div.innerHTML = `
+                                <i class="fas fa-map-marker-alt text-blue-500"></i>
+                                <span class="text-sm text-gray-600">${place.name}</span>
+                            `;
+                            landmarksContainer.appendChild(div);
+                        });
+                    } else {
+                        landmarksContainer.innerHTML = '<p class="text-sm text-gray-500">No nearby landmarks found</p>';
+                    }
+                });
+
+                // Update zone statistics
+                const nearbyComplaints = getNearbyComplaints(complaintId, position);
+                updateZoneStatistics(position, nearbyComplaints);
+            } else {
+                // Handle case when no location is available
+                document.getElementById('modalLocation').textContent = 'Location not provided';
+                document.getElementById('modalAddress').textContent = 'Not available';
+                
+                // Clear maps
+                markers.forEach(marker => marker.setMap(null));
+                markers = [];
+                if (zoneCircle) zoneCircle.setMap(null);
+                
+                // Update UI elements
+                document.getElementById('nearbyLandmarks').innerHTML = '<p class="text-sm text-gray-500">No location data available</p>';
+                document.getElementById('zoneTotalComplaints').textContent = '-';
+                document.getElementById('zoneAvgResolution').textContent = '-';
+                document.getElementById('zoneCommonIssue').textContent = '-';
+                document.getElementById('nearbyComplaints').textContent = '0';
+                document.getElementById('zoneDensity').textContent = 'N/A';
+            }
+
+            // Show modal
+            document.getElementById('complaintModal').style.display = 'block';
+        }
+
+        function getNearbyComplaints(currentComplaintId, position) {
+            const nearbyComplaints = [];
+            const complaintCards = document.querySelectorAll('.complaint-card');
+            
+            complaintCards.forEach(card => {
+                const complaintId = card.dataset.complaintId;
+                if (complaintId !== currentComplaintId) {
+                    const locationData = fetchLocationData(complaintId);
+                    if (locationData && locationData.latitude && locationData.longitude) {
+                        const complaintPosition = new google.maps.LatLng(locationData.latitude, locationData.longitude);
+                        const distance = google.maps.geometry.spherical.computeDistanceBetween(position, complaintPosition);
+                        
+                        if (distance <= ZONE_RADIUS) {
+                            nearbyComplaints.push({
+                                id: complaintId,
+                                latitude: locationData.latitude,
+                                longitude: locationData.longitude,
+                                distance: distance
+                            });
+                        }
+                    }
+                }
+            });
+            
+            return nearbyComplaints;
+        }
+
+        function updateZoneStatistics(position, nearbyComplaints) {
+            document.getElementById('nearbyComplaints').textContent = nearbyComplaints.length;
+            
+            // Calculate zone density
+            const density = nearbyComplaints.length / (Math.PI * Math.pow(ZONE_RADIUS / 1000, 2));
+            let densityText = 'Low';
+            if (density > 5) densityText = 'High';
+            else if (density > 2) densityText = 'Medium';
+            document.getElementById('zoneDensity').textContent = densityText;
+            
+            // Update other statistics
+            document.getElementById('zoneTotalComplaints').textContent = nearbyComplaints.length + 1; // Include current complaint
+            document.getElementById('zoneAvgResolution').textContent = 'Calculating...';
+            document.getElementById('zoneCommonIssue').textContent = 'Analyzing...';
+        }
+
+        function closeModal() {
+            document.getElementById('complaintModal').style.display = 'none';
+        }
+
+        function withdrawComplaint(complaintId) {
+            if (confirm('Are you sure you want to withdraw this complaint? This action will be reviewed by officials.')) {
+                fetch(`/withdraw_complaint/${complaintId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert(data.message || 'Error withdrawing complaint');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error withdrawing complaint');
+                });
+            }
+        }
+
+        // Close modal when clicking outside
+        window.addEventListener('click', function(event) {
+            const modal = document.getElementById('complaintModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html> 
